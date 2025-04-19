@@ -7,6 +7,10 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 
+# Get the directory where your script is located
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+csv_path = os.path.join(BASE_DIR, 'RFID_logs.csv')
+
 def calculate_consistency_score(uid):
     """
     Calculate a consistency score out of 100 for a specific gym user based on their RFID logs.
@@ -20,7 +24,7 @@ def calculate_consistency_score(uid):
     """
     try:
         # Load RFID logs
-        df = pd.read_csv('RFID_logs.csv')
+        df = pd.read_csv(csv_path)
         
         # Filter logs for the specific user
         user_logs = df[df['UID'] == uid].copy()
@@ -337,11 +341,13 @@ def classify_user_profile(features):
 def train_models_from_data():
     """
     Train ML models for scoring and clustering based on existing data.
-    This function should be run periodically to update the models.
     """
     try:
+        # Use absolute path to the CSV file
+        csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'RFID_logs.csv')
+        
         # Load RFID logs
-        df = pd.read_csv('RFID_logs.csv')
+        df = pd.read_csv(csv_path)
         
         if df.empty:
             return {"error": "No data available for training"}

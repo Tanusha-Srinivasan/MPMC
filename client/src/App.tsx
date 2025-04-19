@@ -1,15 +1,7 @@
-
-import { Button } from "./components/ui/button"
-import { Progress } from "./components/ui/progress"
-
+import Landing from "./pages/Landing";
 
 const App = () => {
-  return (
-    <div className="p-5 space-y-2 bg-gray-100">
-      <Button>Click me</Button>
-      <Progress value={33} />
-    </div>
-  )
+  return <Landing />;
 }
 
-export default App
+export default App;
