@@ -1,11 +1,13 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify, make_response
+import pandas as pd
+import os
 from app.utils.gym_utils import calculate_consistency_score, train_models_from_data
 
-gymBP = Blueprint("gym", __name__, url_prefix='/gym/v1')
+# Create the blueprint with proper configuration
+gymBP = Blueprint('gym', __name__)
 
-
-@gymBP.route('/score', methods=['POST'])
-def get_score():
+@gymBP.route('/score', methods=['POST', 'OPTIONS'])
+def get_consistency_score():
     """
     Calculate ML-enhanced consistency score for a gym user based on their RFID logs.
     
@@ -17,22 +19,64 @@ def get_score():
     Returns:
         JSON response with consistency score, user classification, and insights
     """
+    # Handle OPTIONS request (preflight)
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+        
+    # Handle POST request
+    data = request.get_json()
+    uid = data.get('uid', '')
+    
+    if not uid:
+        return jsonify({"error": "UID is required"}), 400
+    
+    result = calculate_consistency_score(uid)
+    return jsonify(result)
+
+@gymBP.route('/available-rfids', methods=['GET', 'OPTIONS'])
+def get_available_rfids():
+    # Handle OPTIONS request (preflight)
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+        return response
+        
     try:
-        data = request.get_json()
+        # Use absolute path to the CSV file
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        csv_path = os.path.join(base_dir, 'RFID_logs.csv')
         
-        if not data or 'uid' not in data:
-            return jsonify({"error": "Missing UID parameter"}), 400
+        # Check if file exists
+        if not os.path.exists(csv_path):
+            csv_path = os.path.join(os.getcwd(), 'RFID_logs.csv')
         
-        uid = data.get('uid')
-        score_data = calculate_consistency_score(uid)
+        # Load RFID logs
+        df = pd.read_csv(csv_path)
         
-        return jsonify(score_data)
+        # Get unique UIDs
+        uids = df['UID'].unique().tolist()
+        
+        # Count occurrences of each UID
+        uid_counts = df['UID'].value_counts().to_dict()
+        
+        # Format response
+        result = [
+            {"uid": uid, "records": uid_counts.get(uid, 0)} 
+            for uid in sorted(uids)
+        ]
+        
+        return jsonify({"rfids": result})
     
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-
-@gymBP.route('/train-models', methods=['POST'])
+@gymBP.route('/v1/train-models', methods=['POST'])
 def train_models():
     """
     Admin endpoint to train or retrain the ML models based on current data.
@@ -42,74 +86,6 @@ def train_models():
     """
     try:
         result = train_models_from_data()
-        return jsonify(result)
+        return jsonify({"message": "Models trained successfully", "details": result})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
-@gymBP.route('/users/<uid>/insights', methods=['GET'])
-def get_user_insights(uid):
-    """
-    Get detailed insights for a specific user.
-    
-    Returns:
-        JSON response with detailed user insights and recommendations
-    """
-    try:
-        score_data = calculate_consistency_score(uid)
-        
-        # Add personalized recommendations based on user profile
-        if "user_type" in score_data:
-            recommendations = generate_recommendations(score_data)
-            score_data["recommendations"] = recommendations
-            
-        return jsonify(score_data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-def generate_recommendations(score_data):
-    """
-    Generate personalized recommendations based on user profile.
-    
-    Args:
-        score_data (dict): User score and profile data
-        
-    Returns:
-        list: Personalized recommendations
-    """
-    recommendations = []
-    
-    # Frequency recommendations
-    if score_data["frequency"]["percentage"] < 30:
-        recommendations.append("Try setting a goal to visit the gym at least 2-3 times per week")
-    
-    # Consistency recommendations
-    regularity = score_data["regularity"]
-    
-    if regularity["consistency_metric"] < 50:
-        recommendations.append("Your workout schedule varies a lot. Try to establish a more consistent routine")
-    
-    # Time pattern recommendations
-    time_pattern = regularity["time_pattern"]
-    max_time = max(time_pattern, key=time_pattern.get)
-    
-    if max_time == "morning" and time_pattern["morning"] > 70:
-        recommendations.append("You're a morning person! Consider joining our early bird group classes")
-    elif max_time == "evening" and time_pattern["evening"] > 70:
-        recommendations.append("You prefer evening workouts. Our evening HIIT classes might be perfect for you")
-    
-    # Day pattern recommendations
-    day_pattern = regularity["day_pattern"]
-    
-    # Find days with low attendance
-    low_days = [day for day, pct in day_pattern.items() if pct < 5]
-    if low_days:
-        day_str = ", ".join(low_days)
-        recommendations.append(f"You rarely visit on {day_str}. Our special classes on these days might interest you")
-    
-    # Recency recommendations
-    if score_data["recency"]["days_since_last_visit"] > 7:
-        recommendations.append("It's been a while since your last visit. We miss you! Come back for a free fitness assessment")
-    
-    return recommendations

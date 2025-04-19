@@ -14,20 +14,32 @@ csv_path = os.path.join(BASE_DIR, 'RFID_logs.csv')
 def calculate_consistency_score(uid):
     """
     Calculate a consistency score out of 100 for a specific gym user based on their RFID logs.
-    Uses machine learning to enhance scoring with pattern recognition and user classification.
-    
-    Args:
-        uid (str): The UID of the gym member
-        
-    Returns:
-        dict: Dictionary containing score and supporting metrics
     """
     try:
+        # Use absolute path to the CSV file
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        csv_path = os.path.join(base_dir, 'RFID_logs.csv')
+        
+        if not os.path.exists(csv_path):
+            csv_path = os.path.join(os.getcwd(), 'RFID_logs.csv')
+            
         # Load RFID logs
         df = pd.read_csv(csv_path)
         
+        # Normalize UIDs to uppercase for case-insensitive comparison
+        uid = uid.upper()
+        df['UID'] = df['UID'].str.upper()
+        
+        # Filter data for the specific user
+        user_data = df[df['UID'] == uid]
+        
+        if user_data.empty:
+            return {"error": f"No gym attendance records found for RFID: {uid}"}
+            
+        # Continue with existing code...
+        
         # Filter logs for the specific user
-        user_logs = df[df['UID'] == uid].copy()
+        user_logs = user_data.copy()
         
         if user_logs.empty:
             return {"score": 0, "message": "No gym activity found for this user"}
